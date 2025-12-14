@@ -1,6 +1,9 @@
 # Revenue Wizard - Theater Financial Reconciliation & Analytics Platform
 
-A comprehensive financial management system that automates revenue reconciliation and provides business intelligence analytics for theater operations.
+A comprehensive financial management system that automates shows reconciliations (payouts) and provides business intelligence analytics for theater operations.
+
+![Revenue Stats](screenshot.png)
+![Time Slot Analysis](screenshot2.png)
 
 ## Overview
 
