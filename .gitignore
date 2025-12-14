@@ -1,0 +1,38 @@
+# Sensitive data files (contain real financial/customer data)
+*.JSON
+*.json
+/internal/
+
+# Keep example files if you create them
+!*example*.json
+!*sample*.json
+
+# Database credentials
+config.php
+db_config.php
+.env
+.env.local
+
+# Compiled PHP
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Uploaded files
+uploads/
