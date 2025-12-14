@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>PF Revenue SF</title>
+<!--meta name="viewport" content="width=device-width, initial-scale=1"-->
+<link href='https://fonts.googleapis.com/css?family=Open+Sans:700,400' rel='stylesheet' type='text/css'>
+<script type='text/javascript' src="../js/jquery-2.1.1.min.js"></script>
+<script type='text/javascript' src="chosen_v1.4.2/chosen.jquery.min.js"></script>
+<script type='text/javascript' src="chosen_v1.4.2/chosen.proto.min.js"></script>
+<link rel="stylesheet" type="text/css" href="chosen_v1.4.2/chosen.min.css">
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+
+<link href="favicon.ico?v=3" rel="icon" type="image/x-icon" />
+<link rel="apple-touch-icon" href="https://www.pianofight.com/internal/rev-wiz-icon.png">
+
+<script type="text/javascript">
+var myEvents;
+var myAttendees;
+var myReconStats;
+var myPayments;
+var	eventStats = [];
+//var modeledStats = [];
+var todaysDate = new Date();
+var html = "";
+var q = [];
+var csvData = [];
+var showIndexes = [];
+var yesterday;
+var trueRevTotals;
+var trueSplitRevByDeal;
+var trueRevTotalsByDate;
+var trueRevTotalsById = []; //We're going to try and use this to get true total rev into the CSV files
+
+var days = new Array(7)
+days[0] = "Sunday";
+days[1] = "Monday";
+days[2] = "Tuesday";
+days[3] = "Wednesday";
+days[4] = "Thursday";
+days[5] = "Friday";
+days[6] = "Saturday";
+
+var months = new Array(12);
+months[0] = "January";
+months[1] = "February";
+months[2] = "March";
+months[3] = "April";
+months[4] = "May";
+months[5] = "June";
+months[6] = "July";
+months[7] = "August";
+months[8] = "September";
+months[9] = "October";
+months[10] = "November";
+months[11] = "December";
+
+$(document).ready(function(){
+	/*if(window.location.href != "https://www.pianofight.com/revenuewizard/index-sf.html"){
+		window.location.assign("https://www.pianofight.com/revenuewizard/index-sf.html")
+	}*/
+
+	//GET EVENTS
+	var xmlHttp = new XMLHttpRequest();
+	var randomVar = Math.floor( Math.random() * ( 1000000000) );  //using this to bust caching of the JSON file(s)
+    
+    xmlHttp.open( "GET", "../internal/eventbrite-data/events-all.JSON?v=" + randomVar, false )
+    xmlHttp.send();
+    myEvents = JSON.parse(xmlHttp.responseText);
+    console.log(myEvents);
+    
+    //GET SERIES
+    /*xmlHttp = new XMLHttpRequest();
+    xmlHttp.open( "GET", "https://www.pianofight.com/internal/eventbrite-data/series.JSON?v=" + randomVar , false )
+    xmlHttp.send();
+    mySeries = JSON.parse(xmlHttp.responseText);
+    console.log(mySeries);*/
+    
+    //GET ATTENDEES
+    xmlHttp = new XMLHttpRequest();
+    xmlHttp.open( "GET", "../internal/eventbrite-data/attendees.JSON?v=" + randomVar , false )
+    xmlHttp.send();
+    myAttendees = JSON.parse(xmlHttp.responseText);
+    console.log(myAttendees);
+    
+    //GET RECONCILIATION STATS
+    xmlHttp = new XMLHttpRequest();
+    xmlHttp.open( "GET", "../internal/reconStats.JSON?v=" + randomVar , false )
+    xmlHttp.send();
+    myReconStats = JSON.parse(xmlHttp.responseText);
+    console.log(myReconStats);
+    
+    
+    //REMOVE UNLISTED EVENTS
+    /*var unlistedEvents = [];
+    
+    for(i = 0; i < myEvents.length; i++){
+    	if(myEvents[i].listed != true){
+    		unlistedEvents.push(i);
+    	}
+    }
+    for(i = unlistedEvents.length ; i > 0; i--){
+    	myEvents.splice(unlistedEvents[i-1], 1);
+    }*/
+    //END REMOVING UNLISTED EVENTS
+    
+    //CREATE PAYMENTS ARRAY
+    myPayments = [];
+    
+    for (i=0; i<myEvents.length; i++){
+    	myPayments[myEvents[i].id] = []
+    	
+		myPayments[myEvents[i].id].totalRev = 0;
+		myPayments[myEvents[i].id].totalEBFees = 0;
+		myPayments[myEvents[i].id].totalPaymentFees = 0;
+		myPayments[myEvents[i].id].pfTixMargin = 0;
+		myPayments[myEvents[i].id].totalTax = 0;
+        myPayments[myEvents[i].id].onlineTix = 0;
+        myPayments[myEvents[i].id].onlineSales = 0;
+        myPayments[myEvents[i].id].onlineFees = 0;
+		myPayments[myEvents[i].id].atdTix = 0;
+		myPayments[myEvents[i].id].atdSales = 0;
+		myPayments[myEvents[i].id].checkedIn = 0;
+		myPayments[myEvents[i].id].cashSales = 0;
+		myPayments[myEvents[i].id].pfRoyalty = 0;
+		myPayments[myEvents[i].id].pfLicenseeFee = 0;
+		myPayments[myEvents[i].id].atdFees = 0;
+		myPayments[myEvents[i].id].comps = 0;
+    }
+    
+    //CONVERT ATTENDEES DATA INTO PAYMENT DATA
+    for(i=0; i<myAttendees.length; i++){
+    	var totalRev = 0;
+		var totalEBFees = 0;
+		var totalPaymentFees = 0;
+		var pfTixMargin = 0;
+		var totalTax = 0;
+        var onlineTix = 0;
+        var onlineSales = 0;
+        var onlineFees = 0;
+		var atdTix = 0;
+		var atdSales = 0;
+		var checkedIn = 0;
+		var cashSales = 0;
+		var pfRoyalty = 0;
+		var pfLicenseeFee = 0;
+		var atdFees = 0;
+		var listedPrice = 0;
+		var comps = 0;
+	
+		if(myAttendees[i].refunded === false && myAttendees[i].cancelled === false){
+			
+			//if(myAttendees[i].event_id==="271414567277"){console.log(myAttendees[i])} //debugging for a single event
+		
+			totalRev += myAttendees[i].costs.gross.value/100;
+			totalEBFees += myAttendees[i].costs.eventbrite_fee.value/100;
+			totalPaymentFees += myAttendees[i].costs.payment_fee.value/100;
+			totalTax += myAttendees[i].costs.tax.value/100;
+			if(totalEBFees>0){
+                var flat_fee = 1.0;
+                
+                att_order_date = new Date (myAttendees[i].created);
+                new_fee_date = new Date(2022, 6, 14, 14);
+                
+                if(att_order_date > new_fee_date){flat_fee = 1.5;}
+                
+                listedPrice=(totalRev-totalEBFees-totalPaymentFees-flat_fee)/(1.05); //$1 and 5% are our standard 2021/2022 royalties, would be nice to define this elsewhere.
+			}
+			else{
+				listedPrice=totalRev;
+			}
+			pfRoyalty = totalRev-listedPrice-totalEBFees-totalPaymentFees; 
+
+			//NOTE: The following was updated when Eventbrite seemed to stop supplying the Boxoffice affiliate code Aug, 2018
+            if (myAttendees[i].costs.gross.value === 0){
+                comps = 1;
+            }
+			/*else if( (myAttendees[i].affiliate === "BoxOffice" && myAttendees[i].costs.gross.value!=0) || (myAttendees[i].costs.eventbrite_fee.value===0 && myAttendees[i].costs.payment_fee.value!=0) || (myAttendees[i].email.indexOf('atdorders') !== -1 && myAttendees[i].costs.gross.value!=0) ){*/
+            else if (myAttendees[i].costs.eventbrite_fee.value===0){
+				atdTix += 1;
+				atdSales += myAttendees[i].costs.gross.value/100;
+				atdFees += myAttendees[i].costs.payment_fee.value/100;
+				
+				
+				//listedPrice=(totalRev-totalEBFees-totalPaymentFees); //We had this wrong until Jan 10, 2022
+				listedPrice=totalRev;
+				pfRoyalty=0;
+				
+				if(myAttendees[i].costs.payment_fee.value === 0){
+					cashSales += myAttendees[i].costs.gross.value/100;
+				}
+			}
+            else{
+                onlineTix += 1;
+                onlineSales += myAttendees[i].costs.gross.value/100;
+                onlineFees += myAttendees[i].costs.payment_fee.value/100 + myAttendees[i].costs.eventbrite_fee.value;
+            }
+			
+			/*
+			if (myAttendees[i].costs.gross.value / 100 > 0){
+				pfLicenseeFee += 1;
+			}
+			*/
+			
+			//Turning on Licensee Fee for all tickets including comps
+			pfLicenseeFee += 1;
+			
+			pfTixMargin = pfLicenseeFee + pfRoyalty;
+			
+            /*if( ((myAttendees[i].affiliate === "BoxOffice" && myAttendees[i].costs.gross.value!=0) || (myAttendees[i].costs.eventbrite_fee.value===0 && myAttendees[i].costs.payment_fee.value!=0) || (myAttendees[i].email.indexOf('atdorders') !== -1)) && myAttendees[i].costs.payment_fee.value === 0){
+                cashSales += myAttendees[i].costs.gross.value/100;
+            }*/
+			
+			if(myAttendees[i].checked_in === true){
+				checkedIn += 1;
+			}
+			
+			//return [totalRev, totalEBFees, totalPaymentFees, totalTax, atdTix, atdSales];
+			
+			if(myPayments[myAttendees[i].event_id]){
+				myPayments[myAttendees[i].event_id].totalRev += rd(totalRev);
+				myPayments[myAttendees[i].event_id].totalEBFees += rd(totalEBFees);
+				myPayments[myAttendees[i].event_id].totalPaymentFees += rd(totalPaymentFees);
+				myPayments[myAttendees[i].event_id].pfTixMargin += rd(pfTixMargin);
+				myPayments[myAttendees[i].event_id].totalTax += rd(totalTax);
+                myPayments[myAttendees[i].event_id].onlineTix += rd(onlineTix);
+                myPayments[myAttendees[i].event_id].onlineSales += rd(onlineSales);
+                myPayments[myAttendees[i].event_id].onlineFees += rd(onlineFees);
+				myPayments[myAttendees[i].event_id].atdTix += rd(atdTix);
+				myPayments[myAttendees[i].event_id].atdSales += rd(atdSales);
+				myPayments[myAttendees[i].event_id].checkedIn += rd(checkedIn);
+				myPayments[myAttendees[i].event_id].cashSales += rd(cashSales);
+				myPayments[myAttendees[i].event_id].pfRoyalty += rd(pfRoyalty);
+				myPayments[myAttendees[i].event_id].pfLicenseeFee += rd(pfLicenseeFee);
+				myPayments[myAttendees[i].event_id].atdFees += rd(atdFees);
+				myPayments[myAttendees[i].event_id].comps += comps;
+			}
+			
+		}
+    }
+    
+    //console.log(myPayments);
+	
+	//CONVERT EVENT ARRAY INTO DATE ARRAY
+    var eventNames = [];
+    
+    for ( i = 0 ; i < myEvents.length ; i++){
+		var tixSold = 0;
+		//comps = 0;
+		var gaPrice = 0;
+		
+		// Calculate Total Ticketing Revenue
+		var tixClasses = myEvents[i].ticket_classes;
+        if(tixClasses){
+            for ( j = 0; j < tixClasses.length ; j++ ){
+                if (!tixClasses[j].free && !tixClasses[j].donation){
+                    tixSold += tixClasses[j].quantity_sold;
+                    totalRev += tixClasses[j].quantity_sold * tixClasses[j].cost.value/100;
+                    
+                    if(tixClasses[j].name === "General Admission"){
+                        gaPrice = tixClasses[j].cost.value/100;
+                    }
+                }
+                else if ( tixClasses[j].free ){
+                    //comps += tixClasses[j].quantity_sold; //Now we're doing comps a different way
+                }
+            }
+        }
+
+		//var payments = getPayments(myEvents[i]);
+		
+		/*totalRev = payments[0]; // Adjustment using attendees data
+		ebTixFees = payments[1] + payments[2]; // Adjustment using attendees data
+		atdTix = payments[4];
+		atdSales = payments[5];*/
+		
+		//console.log(myPayments[myEvents[i].id].totalRev);
+		
+		var stats = {
+			name : myEvents[i].name.text,
+			eventId : myEvents[i].id,
+			local_start : myEvents[i].start.local,
+			utc_start : myEvents[i].start.utc,
+			total_rev : myPayments[myEvents[i].id].totalRev,
+			ebTixFees : myPayments[myEvents[i].id].totalEBFees,
+			ccFees : myPayments[myEvents[i].id].totalPaymentFees,
+			pfTixMargin : myPayments[myEvents[i].id].pfTixMargin,
+			totalTax : myPayments[myEvents[i].id].totalTax,
+			gaPrice : gaPrice,
+			tixSold : (myPayments[myEvents[i].id].onlineTix + myPayments[myEvents[i].id].atdTix),
+            onlineTix: myPayments[myEvents[i].id].onlineTix,
+            onlineSales: myPayments[myEvents[i].id].onlineSales,
+            onlineFees: myPayments[myEvents[i].id].onlineFees,
+			comps : myPayments[myEvents[i].id].comps,
+			checkedIn : myPayments[myEvents[i].id].checkedIn,
+			atdTix: myPayments[myEvents[i].id].atdTix,
+			atdSales: myPayments[myEvents[i].id].atdSales,
+			cashSales: myPayments[myEvents[i].id].cashSales,
+			pfRoyalty: myPayments[myEvents[i].id].pfRoyalty,
+			//pfLicenseeFee: myPayments[myEvents[i].id].pfLicenseeFee,
+			pfLicenseeFee: (myPayments[myEvents[i].id].onlineTix + myPayments[myEvents[i].id].atdTix + myPayments[myEvents[i].id].comps),  //Fix for when we changed to fees on comps as well
+			atdFees: myPayments[myEvents[i].id].atdFees
+		};
+		
+		eventStats.push(stats);
+		eventNames.push(myEvents[i].name.html); // Using name.html instead of name.text seems to fix issues with problematic characters
+    }
+    
+    //console.log(eventStats);
+    
+    //CREATE ARRAY OF UNIQUE SHOW NAMES
+	var uniqueNames = [];
+	$.each(eventNames, function(i, el){
+		if($.inArray(el, uniqueNames) === -1) uniqueNames.push(el);
+	});
+	
+	for (i=0; i<uniqueNames.length; i++){
+		var itemval = "<option value='" + uniqueNames[i] + "'>" + uniqueNames[i] + "</option>";
+		$("#show-selector").append(itemval);
+	}
+	
+	$("#show-selector").chosen();
+    
+    yesterday = new Date();
+    yesterday.setDate( yesterday.getDate() - 1 );
+    
+    document.getElementById("startDateSelector").defaultValue = yesterday.toDateInputValue();
+    document.getElementById("endDateSelector").defaultValue = yesterday.toDateInputValue();
+
+    revWizDates(eventStats);
+});
+
+function revWizDates(stats, startDate, endDate){
+	//Initialize CSV file
+	csvData = [["Date", "Time", "Name", "Online Sales", "Door Sales", "Total Sales", "GA Price", "Total Tickets", "ATD Tickets", "Comps", "EB Fees", "PF Margin", "Rent", "Deposit", "Technician", "Misc Note 1", "Misc Amt 1", "Misc Note 2", "Misc Amt 2", "Misc Note 3", "Misc Amt 3", "PF Profit Share", "Deal Type", "Stage / Venue", "True Total Revenue"]];
+	
+	var sd;
+	var ed;
+
+	if(!startDate){
+		if ( $("#startDateSelector").val() ) {
+			sd = new Date( $("#startDateSelector").val() );
+			sd.setHours( sd.getHours() + 8 ); // hacky correction to fix UTC local stuff in Safari + Chrome
+		}
+		else {
+			sd = new Date(); 
+			sd.setDate( sd.getDate() - 1 );
+		}
+	}
+	else{
+		sd = startDate;
+		sd.setHours(0,0,0,0);
+	}
+	
+	if(!endDate){
+		if ( $("#endDateSelector").val() ) { 
+			ed = new Date( $("#endDateSelector").val() );
+			ed.setHours( ed.getHours() + 8 ); // hacky correction to fix UTC local stuff in Safari + Chrome
+		}
+		else { ed = new Date(); }
+	}
+	else{
+		ed = endDate;
+		ed.setHours(24,0,0,0);
+		//ed.setHours(0,0,0,0);
+	}
+	
+	ed.setDate(ed.getDate()+1); // hacky fix for the way I originally set dates to work
+	
+	var genRev = {tixMargin : 0 , pfRevSplit : 0 , rentMargin : 0 , techMargin : 0 , techFee : 0 , showRevSplit : 0, facilitronRent : 0, ebTixFees : 0, ccFees : 0, totalRev : 0, tixSold : 0, comps : 0, checkedIn : 0, cashSales : 0, pfRoyalty: 0, pfLicenseeFee: 0, atdFees: 0};
+	showIndexes = [];
+	
+	for( i=0 ; i<stats.length ; i++) {
+		var compareDate = new Date (stats[i].local_start);
+		if( (compareDate >= sd && compareDate <= ed) && (stats[i].total_rev > 0 || (document.getElementById('include-no-rev-toggle').checked)) && ($('#dealTypeSelector').val() === "All Deals" || (stats[i].eventId in myReconStats && $('#dealTypeSelector').val() === myReconStats[stats[i].eventId].dealType) ) && ($('#stageSelector').val() === "All Stages" || (stats[i].eventId in myReconStats && $('#stageSelector').val() === myReconStats[stats[i].eventId].stage) ) ){
+			//HTML Stuff
+			genRev.tixMargin += stats[i].ticket_margin;
+			genRev.pfRevSplit += stats[i].pfRevSplit;
+			genRev.rentMargin += stats[i].rentMargin;
+			genRev.techMargin += stats[i].tech_margin;
+			genRev.techFee += stats[i].techFee;
+			genRev.showRevSplit += stats[i].showRevSplit;
+			genRev.facilitronRent += stats[i].rentFee;
+			genRev.ebTixFees += stats[i].ebTixFees;
+			genRev.ccFees += stats[i].ccFees;
+			genRev.totalRev += stats[i].total_rev;
+			genRev.tixSold += stats[i].tixSold;
+			genRev.comps += stats[i].comps;
+			genRev.checkedIn += stats[i].checkedIn;
+			genRev.cashSales += stats[i].cashSales;
+			genRev.pfRoyalty += stats[i].pfRoyalty;
+			genRev.pfLicenseeFee += stats[i].pfLicenseeFee;
+			genRev.atdFees += stats[i].atdFees;
+	
+			showIndexes.push(i);
+		}
+	}
+	
+	var genTotal = genRev.totalRev;
+	
+	html = ""
+	//html +="<h4>Start Date : " + sd.toLocaleDateString() + " --- End Date : " + ed.getDate().toLocaleDateString() + "</h4>"
+	
+	//html += "<h2> Shows </h2>";
+	html += "<h2>Total Revenue : $ " + rd(genTotal) + "<br>";
+	html += "Tickets: " + (genRev.tixSold + genRev.comps) + " Total / " + genRev.comps + " Comps / " + genRev.checkedIn + " Checked In<br>";
+	html += "Cash Sales: $ " + rd(genRev.cashSales) + "<br>";
+	html += "EB Fees: $ " + rd(genRev.ebTixFees) + " / CC Fees : $ " + rd(genRev.ccFees) + "<br>";
+	html += "Total Number of Shows : " + showIndexes.length + "</h2>";
+	html += "<div class='recon-stats-content'><div id='trueRevTotals' style='border: 1px solid black;'>";
+	html += "</div></div><br>";
+	html += "<div class='recon-analytics'>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevPieChart'></div></div>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevByDealPieChart'></div></div>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='numShowsByDealPieChart'></div></div>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevByDayOfWeekBarChart'></div></div>";
+		html += "<div style='width:33%; min-width:400px; height:400px; vertical-align:top; display:inline-block;'><div id='topShowInPeriodByAveRevenue'></div></div>";
+		html += "<div style='width:33%; min-width:400px; height:400px; vertical-align:top; display:inline-block;'><div id='topShowInPeriodByNumber'></div></div>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='aveRevByDayAndTimeHeatMap'></div></div>";
+		html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='aveRevPerShowByDayAndTimeHeatMap'></div></div>";
+		html += "<div id='trueRevBarChartByDay'></div>";
+		html += "<div id='trueRevBarChartByWeek'></div>";
+		html += "<div id='trueRevBarChartByMonth'></div>";
+	html += "</div>";
+	
+	for(i=0 ; i<showIndexes.length ; i++){		
+		html += perShowHTML(stats, showIndexes, i);
+		//console.log(i); //Show counter
+	}
+	
+	$( "#rev-wiz" ).html(html);
+	highlightReconVars();
+	
+	for(i=0 ; i<showIndexes.length ; i++){
+		csvData.push(perShowCsv(stats, showIndexes, i));
+	}
+	
+	//toggleFreeShows();
+	toggleFeeBreakdown();
+	toggleReconStats();
+	$('#recon').hide();
+	toggleAnalytics();
+	//$('#csv-export').show();
+}
+
+function revWizShow(stats, showName, sd, ed){
+	//Initialize CSV file
+	csvData = [["Date", "Time", "Name", "Online Sales", "Door Sales", "Total Sales", "GA Price", "Total Tickets", "ATD Tickets", "Comps", "EB Fees", "PF Margin", "Rent", "Deposit", "Technician", "Misc Note 1", "Misc Amt 1", "Misc Note 2", "Misc Amt 2", "Misc Note 3", "Misc Amt 3", "PF Profit Share", "Deal Type", "Stage / Venue", "True Total Revenue"]];
+
+	var sd;
+	var ed;
+	
+	if ( $("#startDateSelector").val() ) {
+		sd = new Date( $("#startDateSelector").val() );
+	}
+	else { sd = new Date('December 19, 2014 00:00:00'); }
+	if ( $("#endDateSelector").val() ) { 
+		ed = new Date( $("#endDateSelector").val() );
+	}
+	else { ed = new Date(); }
+	
+	ed.setDate(ed.getDate()+1); // hacky fix for the way I originally set dates to work
+
+	var sn = showName;
+	showIndexes = [];
+	var pfRev = {tixMargin : 0 , pfRevSplit : 0 , rentMargin : 0 , techMargin : 0 , techFee : 0 , showRevSplit : 0, facilitronRent : 0, ebTixFees : 0};
+	
+	var totalRev = 0;
+	var totalTix = 0;
+	var totalOnlineSales = 0;
+	var totalDoorTix = 0;
+	var totalDoorSales = 0;
+	var totalComps = 0;
+	var cashSales = 0;
+	
+	for( i=0 ; i<stats.length ; i++) {
+		if( sn === stats[i].name ){
+			var compareDate = new Date (stats[i].local_start);
+			if( (compareDate >= sd && compareDate <= ed) && (stats[i].total_rev > 0 || (document.getElementById('include-no-rev-toggle').checked)) && ($('#dealTypeSelector').val() === "All Deals" || $('#dealTypeSelector').val() === myReconStats[stats[i].eventId].dealType) ){
+				showIndexes.push(i);
+
+				pfRev.tixMargin += stats[i].ticket_margin;
+				pfRev.pfRevSplit += stats[i].pfRevSplit;
+				pfRev.rentMargin += stats[i].rentMargin;
+				pfRev.techMargin += stats[i].tech_margin;
+				pfRev.techFee += stats[i].techFee;
+				pfRev.showRevSplit += stats[i].showRevSplit;
+				pfRev.facilitronRent += stats[i].rentFee;
+				pfRev.ebTixFees += stats[i].ebTixFees;
+		
+				totalRev += stats[i].total_rev;
+				totalTix += stats[i].tixSold + stats[i].comps;
+				totalOnlineSales += stats[i].total_rev - stats[i].ebTixFees - stats[i].ccFees - stats[i].pfRoyalty - stats[i].atdSales + stats[i].atdFees; 
+				totalDoorTix += stats[i].atdTix;
+				totalDoorSales += stats[i].atdSales;
+				totalComps += stats[i].comps;
+				cashSales += stats[i].cashSales;
+				
+				//console.log(stats[i]);
+			}
+		}
+	}
+	
+	if( !showIndexes[0] ){ $( "#rev-wiz" ).html( "<h1>No Results</h1>" ); }
+	else{
+		var pfRevTotal = pfRev.tixMargin + pfRev.pfRevSplit + pfRev.rentMargin + pfRev.techMargin;
+	
+		html = ""	
+		//html += "<h1>" + sn + "</h1>";
+		
+		html += "<h2>Total Rev : $" + rd(totalRev) + " / Total Tix : " + totalTix  + "<br/>";
+		html += "Online Sales : $" + rd(totalOnlineSales) + " / Tix : " + (totalTix-totalComps-totalDoorTix) + "<br/>";
+		html += "Door Sales : $" + totalDoorSales + " / Tix : " + totalDoorTix + "<br/>";
+		html += "Cash Sales : $" + cashSales + "<br/>";
+		html += "Comps : " + totalComps + "</h2>";
+		html += "<div class='recon-stats-content'><div id='trueRevTotals' style='border: 1px solid black;'>";
+		html += "</div></div>";
+		html += "<div class='recon-analytics'>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevPieChart'></div></div>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevByDealPieChart'></div></div>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='numShowsByDealPieChart'></div></div>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='trueRevByDayOfWeekBarChart'></div></div>";
+			html += "<div style='width:33%; min-width:400px; height:400px; vertical-align:top; display:inline-block;'><div id='topShowInPeriodByAveRevenue'></div></div>";
+			html += "<div style='width:33%; min-width:400px; height:400px; vertical-align:top; display:inline-block;'><div id='topShowInPeriodByNumber'></div></div>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='aveRevByDayAndTimeHeatMap'></div></div>";
+			html += "<div style='width:33%; min-width:400px; display:inline-block;'><div id='aveRevPerShowByDayAndTimeHeatMap'></div></div>";
+			html += "<div id='trueRevBarChartByDay'></div>";
+			html += "<div id='trueRevBarChartByWeek'></div>";
+			html += "<div id='trueRevBarChartByMonth'></div>";
+		html += "</div><br>";
+	
+		//html += "<h3> Shows </h3>";
+	
+		var q_temp = [];
+		for(i=0 ; i<showIndexes.length ; i++){
+			html += perShowHTML(stats, showIndexes, i);
+			q_temp.push(returnDateTime( new Date(stats[showIndexes[i]].utc_start)));
+		}
+	
+		$( "#rev-wiz" ).html(html);
+		highlightReconVars();
+		
+		for(i=0 ; i<showIndexes.length ; i++){
+			csvData.push(perShowCsv(stats, showIndexes, i));
+		}
+		
+		//q_temp = q_temp.toString(); //Turn the array elements into comma separated string
+		var q_str = "";
+		for(i=0; i<q_temp.length; i++){
+			if(i===0){
+				q_str += q_temp[i].toString();
+			}
+			else{
+				q_str+= ", " + q_temp[i].toString();
+			}
+		}
+		
+		q=[sn, q_str, totalOnlineSales, totalTix-totalComps-totalDoorTix, totalDoorSales, totalDoorTix, totalComps]; //vars for reconciliation
+	}
+
+	$('#recon').show();
+	toggleFeeBreakdown();
+	toggleReconStats();
+	toggleAnalytics();
+}
+
+String.prototype.insert = function (index, string) {
+  if (index > 0)
+    return this.substring(0, index) + string + this.substring(index, this.length);
+  else
+    return string + this;
+};
+
+function perShowHTML(stats, array, index){
+	var tempHTML = "";
+	
+	if(stats[array[index]].total_rev === 0){
+	tempHTML += "<div class='free-show'>"
+	}
+	else{
+	tempHTML += "<div>"
+	}
+	tempHTML += "<strong>" + stats[array[index]].name + "</strong> (" + returnDateTime( new Date(stats[array[index]].utc_start)) + ")</br>";
+	tempHTML += "Online Sales : $" + rd(stats[array[index]].total_rev-stats[array[index]].atdSales) + " ($" + rd(stats[array[index]].total_rev-stats[array[index]].atdSales-stats[array[index]].pfRoyalty-stats[array[index]].ebTixFees-stats[array[index]].ccFees+stats[array[index]].atdFees) + " Net of Fees) /  Door Sales : $" + rd(stats[array[index]].atdSales) + " / Total : <strong>$" + rd(stats[array[index]].total_rev) + "</strong></br>";
+	tempHTML += "GA Price: $" + stats[array[index]].gaPrice + " / " + (stats[array[index]].tixSold + stats[array[index]].comps) + " Total Tickets / " + stats[array[index]].atdTix + " ATD Tickets / " + stats[array[index]].comps + " Comps</br>";
+	tempHTML += "<span class='fee-breakdown'>EB Fees: $" + rd(stats[array[index]].ebTixFees + stats[array[index]].ccFees) + " / PF Margin: $" + rd(stats[array[index]].pfTixMargin) +"</br></span>";
+	
+		tempHTML += "<div style='border: 1px solid black;' class='recon-stats-content'>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Rent</div><br>"
+				tempHTML += "<input type='number' id='recon-rent-" + stats[array[index]].eventId + "' min=0 step=1 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Deposit</div><br>"
+				tempHTML += "<input type='number' id='recon-deposit-" + stats[array[index]].eventId + "' min=0 step=1 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Technician</div><br>"
+				tempHTML += "<input type='number' id='recon-tech-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Note 1</div><br>"
+				tempHTML += "<input type='text' id='recon-misc-note-1-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value='N/A' class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Amt 1</div><br>"
+				tempHTML += "<input type='number' id='recon-misc-num-1-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Note 2</div><br>"
+				tempHTML += "<input type='text' id='recon-misc-note-2-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value='N/A' class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Amt 2</div><br>"
+				tempHTML += "<input type='number' id='recon-misc-num-2-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Note 3</div><br>"
+				tempHTML += "<input type='text' id='recon-misc-note-3-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value='N/A' class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Misc Amt 3</div><br>"
+				tempHTML += "<input type='number' id='recon-misc-num-3-" + stats[array[index]].eventId + "' min=0 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>PF Profit Share</div><br>"
+				tempHTML += "<input type='number' id='recon-pf-share-" + stats[array[index]].eventId + "' min=0 max=100 style='width:40px;' value=0 class='recon-element'>"
+			tempHTML += "</div>"
+			//tempHTML += "<br>"
+			//Add deal type here: rental, copro, internal, other
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Deal Type</div><br>"
+				tempHTML += "<select id='recon-deal-type-" + stats[array[index]].eventId + "' style='width:40px; display:inline-block; margin-left:5px;' class='recon-element'>"
+					tempHTML += "<option value='rental'>Rental</option>"
+					tempHTML += "<option value='copro'>Copro</option>"
+					tempHTML += "<option value='internal'>Internal</option>"
+					tempHTML += "<option value='school'>School</option>"
+					tempHTML += "<option value='other'>Other</option>"
+					tempHTML += "<option value='faultline'>Faultline</option>"
+					tempHTML += "<option value='music'>Music</option>"
+				tempHTML += "</select>"
+			tempHTML += "</div>"
+			tempHTML += "<div style='display:inline-block'>"
+				tempHTML += "<div class='recon-element'>Stage / Venue</div><br>"
+				tempHTML += "<select id='recon-stage-" + stats[array[index]].eventId + "' style='width:40px; display:inline-block; margin-left:5px;' class='recon-element'>"
+					tempHTML += "<option value='mainStage'>Main Stage</option>"
+					tempHTML += "<option value='secondStage'>Second Stage</option>"
+					tempHTML += "<option value='barStage'>Bar Stage</option>"
+					tempHTML += "<option value='fullVenue'>Full Venue</option>"
+					tempHTML += "<option value='other'>Other</option>"
+				tempHTML += "</select>"
+			tempHTML += "</div>"
+			tempHTML += "<div id='singleShowRecon-" + index + "'><input type='submit' value='Save Single Show Variables' onClick='saveReconVarsSingle(" + index + ");'></div><br/>"
+			tempHTML += "<div id='trueRev-" + stats[array[index]].eventId + "'></div>"
+		tempHTML += "</div><br/>"
+	
+	tempHTML += "</div>"
+	
+	return tempHTML;
+}
+
+function perShowCsv(stats, array, index){
+	//csvData = [["Date/Time", "Name", "Online Sales", "Door Sales", "Total Sales", "GA Price", "Total Tickets", "ATD Sales", "Comps", "EB Fees", "PF Margin"]];
+	var csvRow = [];
+	var csvDate = new Date(stats[array[index]].utc_start)
+	csvRow[0] = (csvDate.getMonth()+1) + "/" + csvDate.getDate() + "/" + csvDate.getFullYear();
+	csvRow[1] = csvDate.getTime();
+	csvRow[2] = stats[array[index]].name.replace(/,/g, ""); //replace gets rid of commas which screw things up in the CSV
+	csvRow[3] = rd(stats[array[index]].total_rev-stats[array[index]].atdSales);
+	csvRow[4] = rd(stats[array[index]].atdSales);
+	csvRow[5] = rd(stats[array[index]].total_rev);
+	csvRow[6] = stats[array[index]].gaPrice;
+	csvRow[7] = stats[array[index]].tixSold + stats[array[index]].comps;
+	csvRow[8] = stats[array[index]].atdTix;
+	csvRow[9] = stats[array[index]].comps;
+	csvRow[10] = rd(stats[array[index]].ebTixFees + stats[array[index]].ccFees);
+	csvRow[11] = rd(stats[array[index]].pfTixMargin);
+	
+	if(stats[array[index]].eventId in myReconStats){
+		csvRow[12] = parseFloat(myReconStats[stats[array[index]].eventId].rentFee);
+		csvRow[13] = parseFloat(myReconStats[stats[array[index]].eventId].deposit);
+		csvRow[14] = parseFloat(myReconStats[stats[array[index]].eventId].techFee);
+		csvRow[15] = myReconStats[stats[array[index]].eventId].miscTxt1;
+		csvRow[16] = parseFloat(myReconStats[stats[array[index]].eventId].miscNum1);
+		csvRow[17] = myReconStats[stats[array[index]].eventId].miscTxt2;
+		csvRow[18] = parseFloat(myReconStats[stats[array[index]].eventId].miscNum2);
+		csvRow[19] = myReconStats[stats[array[index]].eventId].miscTxt3;
+		csvRow[20] = parseFloat(myReconStats[stats[array[index]].eventId].miscNum3);
+		csvRow[21] = parseFloat(myReconStats[stats[array[index]].eventId].pfProfitSplit);
+		csvRow[22] = myReconStats[stats[array[index]].eventId].dealType;
+		csvRow[23] = myReconStats[stats[array[index]].eventId].stage
+		csvRow[24] = trueRevTotalsById[stats[array[index]].eventId];
+	}
+	
+	return csvRow;
+}
+
+function rd(num){
+	return Math.round(num*100)/100;
+}
+
+function getStage(event){
+	var ev = event;
+	var date = new Date(ev.start.utc);
+
+	if ( ev.ticket_classes[0].free === true ) { return "Cabaret Stage"; }
+	
+	if ( ev.capacity < 50 ){ return "Second Stage"; }
+	else if ( ev.capacity >= 50 ){ return "Main Stage"; }
+	else { return "Unknown" }
+}
+
+function getPayments(event){
+	var ev = event;
+	var totalRev = 0;
+	var totalEBFees = 0;
+	var totalPaymentFees = 0;
+	var totalTax = 0;
+	var atdTix = 0;
+	var atdSales = 0;
+	
+	for(j=0 ; j<myAttendees.length ; j++){
+		if(myAttendees[j].event_id === ev.id && myAttendees[j].refunded === false){
+			totalRev += myAttendees[j].costs.gross.value/100;
+			totalEBFees += myAttendees[j].costs.eventbrite_fee.value/100;
+			totalPaymentFees += myAttendees[j].costs.payment_fee.value/100;
+			totalTax += myAttendees[j].costs.tax.value/100;
+
+			if(myAttendees[j].affiliate === "BoxOffice" && myAttendees[j].costs.gross.value!=0){
+				atdTix += 1;
+				atdSales += myAttendees[j].costs.gross.value/100;
+			}
+		}
+	}
+	
+	return [totalRev, totalEBFees, totalPaymentFees, totalTax, atdTix, atdSales];
+}
+
+function returnDateTime (myDate){
+	var formattedDate = "";
+
+	formattedDate += days[myDate.getDay()] + " ";
+	formattedDate += months[myDate.getMonth()] + " ";
+	formattedDate += myDate.getDate() + " ";
+	formattedDate += myDate.getFullYear() + " ";
+	if(myDate.getHours() <= 12){
+		formattedDate += myDate.getHours() + ":";
+	}
+	else{
+		formattedDate += myDate.getHours()-12 + ":";
+	}
+	
+	if(myDate.getMinutes() < 10){
+		formattedDate += '0'+ myDate.getMinutes();
+	}
+	else{
+		formattedDate += myDate.getMinutes();
+	}
+	if(myDate.getHours() <= 12){
+		formattedDate += " AM";
+	}
+	else{
+		formattedDate += " PM";
+	}
+	
+	return(formattedDate);
+}
+
+function setDateDays(numDays){
+	var sd = new Date();
+	sd.setDate( sd.getDate() - numDays );
+	
+	document.getElementById("startDateSelector").defaultValue = sd.toDateInputValue();
+    document.getElementById("endDateSelector").defaultValue = yesterday.toDateInputValue();
+}
+
+function setDateAllTime(){
+	document.getElementById("startDateSelector").defaultValue = ("2014-12-16");
+    document.getElementById("endDateSelector").defaultValue = yesterday.toDateInputValue();
+}
+
+Date.prototype.toDateInputValue = (function() {
+    var local = new Date(this);
+    local.setMinutes(this.getMinutes() - this.getTimezoneOffset());
+    return local.toJSON().slice(0,10);
+})
+
+function updateView(){
+
+	if ( $("#show-selector").val() === "All Shows"){ revWizDates(eventStats); }
+	else{ revWizShow( eventStats, $("#show-selector").val() ); }
+	
+}
+
+function generateReport(){
+	var reconRent = 0;
+	var reconTech = 0;
+	var reconDeposit = 0;
+	var reconMiscNum = 0;
+	var reconMiscNotes = [];
+	var reconPfProfitShare = 0;
+
+	for(i=0;i<showIndexes.length;i++){
+		var eId = myEvents[showIndexes[i]].id;
+		
+		reconRent += parseFloat($('#recon-rent-' + eId).val());
+		reconTech += parseFloat($('#recon-tech-' + eId).val());
+		reconDeposit += parseFloat($('#recon-deposit-' + eId).val());
+		reconMiscNum += parseFloat($('#recon-misc-num-1-' + eId).val());
+		if( reconMiscNotes.indexOf($('#recon-misc-note-1-' + eId).val()) === -1 && $('#recon-misc-note-1-' + eId).val() != "N/A" ){ 
+			reconMiscNotes.push($('#recon-misc-note-1-' + eId).val()); 
+		}
+		reconMiscNum += parseFloat($('#recon-misc-num-2-' + eId).val());
+		if( reconMiscNotes.indexOf($('#recon-misc-note-2-' + eId).val()) === -1 && $('#recon-misc-note-2-' + eId).val() != "N/A" ){ 
+			reconMiscNotes.push($('#recon-misc-note-2-' + eId).val()); 
+		}
+		reconMiscNum += parseFloat($('#recon-misc-num-3-' + eId).val());
+		if( reconMiscNotes.indexOf($('#recon-misc-note-3-' + eId).val()) === -1 && $('#recon-misc-note-3-' + eId).val() != "N/A" ){ 
+			reconMiscNotes.push($('#recon-misc-note-3-' + eId).val() ); 
+		}
+		reconPfProfitShare = parseFloat($('#recon-pf-share-' + eId).val()); // Will take the last profit share only
+	}
+	
+	//console.log(reconMiscNotes);
+	var reconMiscTxt = "";
+
+	for(i=0;i<reconMiscNotes.length;i++){
+		reconMiscTxt = reconMiscTxt.concat(reconMiscNotes[i]+", ");
+	}
+	
+	if (reconMiscTxt === ""){
+		reconMiscTxt = 'N/A';
+	}
+	else{
+		reconMiscTxt = reconMiscTxt.substring(0, reconMiscTxt.length - 2); //Remove final " "
+	}
+
+	//var escapedName = q[0].replace(/\"/g, "");
+
+	var url = "https://pianofight.com/revenuewizard/reconReport2020.html?showName="+q[0]+"&showDates="+q[1]+"&onlineSales="+q[2]+"&onlineTix="+q[3]+"&atdSales="+q[4]+"&atdTix="+q[5]+"&comps="+q[6]+"&rent="+reconRent+"&deposit="+reconDeposit+"&technitian="+reconTech+"&miscStr="+reconMiscTxt+"&miscAmt="+reconMiscNum+"&pfProfitShare="+reconPfProfitShare;
+	var win = window.open(url, '_blank');
+	win.focus();
+}
+
+function generateReportSingleShow(_showName, _showDate, _onlineSales, _onlineTix, _atdSales, _atdTix, _comps, _rent, _deposit, _tech, _miscNote1, _miscNum1, _miscNote2, _miscNum2, _miscNote3, _miscNum3, _pfProfitShare, _dealType){
+	
+	var reconMiscTxt = '';	
+	if(_miscNote1 != 'N/A'){ reconMiscTxt += (_miscNote1 + ', '); }
+	if(_miscNote2 != 'N/A'){ reconMiscTxt += (_miscNote2 + ', '); }
+	if(_miscNote3 != 'N/A'){ reconMiscTxt += (_miscNote3 + ', '); }
+
+	if(reconMiscTxt === ''){ reconMiscTxt = 'N/A' }
+	else{ reconMiscTxt = reconMiscTxt.substring(0, reconMiscTxt.length - 2); } //Remove final ", "
+	
+	var reconMiscNum = _miscNum1+_miscNum2+_miscNum3;
+
+	var url = "https://duncanwold.com/pianofightdotcom/revenuewizard/reconReport2020.html?showName="+_showName+"&showDates="+_showDate+"&onlineSales="+_onlineSales+"&onlineTix="+_onlineTix+"&atdSales="+_atdSales+"&atdTix="+_atdTix+"&comps="+_comps+"&rent="+_rent+"&deposit="+_deposit+"&technitian="+_tech+"&miscStr="+reconMiscTxt+"&miscAmt="+reconMiscNum+"&pfProfitShare="+_pfProfitShare+"&dealType="+_dealType;
+	var win = window.open(url, '_blank');
+	win.focus();
+}
+
+function saveReconVars(){
+	if (confirm('Are you sure you want to save the reconciliation variables?')) {
+		var rightNow = new Date();
+	
+		for(i=0;i<showIndexes.length;i++){
+			var eId = myEvents[showIndexes[i]].id;
+			var eDate = new Date(myEvents[showIndexes[i]].start.utc);
+			var eName = myEvents[showIndexes[i]].name.text;
+		
+			var reconVars = [
+				eId,
+				eName,
+				eDate.toLocaleString(),
+				$('#recon-rent-' + eId).val(),
+				$('#recon-deposit-' + eId).val(),
+				$('#recon-tech-' + eId).val(),
+				$('#recon-misc-num-1-' + eId).val(),
+				$('#recon-misc-note-1-' + eId).val(),
+				$('#recon-misc-num-2-' + eId).val(),
+				$('#recon-misc-note-2-' + eId).val(),
+				$('#recon-misc-num-3-' + eId).val(),
+				$('#recon-misc-note-3-' + eId).val(),
+				$('#recon-pf-share-' + eId).val(),
+				$('#recon-deal-type-' + eId).val(),
+				$('#recon-stage-' + eId).val(),
+				rightNow.toLocaleString()
+			];
+		
+			$.ajax({
+				url: "../internal/reconStats.php",
+				type: "POST",
+				async: false,
+				data: { reconVars : reconVars }
+			}).done(function(){
+				console.log(reconVars);
+			});
+		
+		alert('Done!');
+		
+		//RELOAD RECONCILIATION STATS
+		var xmlHttp = new XMLHttpRequest();
+		var randomVar = Math.floor( Math.random() * ( 1000000000) );  //using this to bust caching of the JSON file(s)
+
+		xmlHttp.open( "GET", "https://www.pianofight.com/internal/reconStats.JSON?v=" + randomVar , false )
+		xmlHttp.send();
+		myReconStats = JSON.parse(xmlHttp.responseText);
+	
+		console.log(myReconStats);
+		
+		updateView();
+			
+		}
+		
+	}
+}
+
+function saveReconVarsSingle(i){
+	if (confirm('Are you sure you want to save the reconciliation variables for this show?')) {
+		var rightNow = new Date();
+		var eId = myEvents[showIndexes[i]].id;
+		var eDate = new Date(myEvents[showIndexes[i]].start.utc);
+		var eName = myEvents[showIndexes[i]].name.text;
+		
+		var reconVars = [	
+			eId,
+			eName,
+			eDate.toLocaleString(),
+			$('#recon-rent-' + eId).val(),
+			$('#recon-deposit-' + eId).val(),
+			$('#recon-tech-' + eId).val(),
+			$('#recon-misc-num-1-' + eId).val(),
+			$('#recon-misc-note-1-' + eId).val(),
+			$('#recon-misc-num-2-' + eId).val(),
+			$('#recon-misc-note-2-' + eId).val(),
+			$('#recon-misc-num-3-' + eId).val(),
+			$('#recon-misc-note-3-' + eId).val(),
+			$('#recon-pf-share-' + eId).val(),
+			$('#recon-deal-type-' + eId).val(),
+			$('#recon-stage-' + eId).val(),
+			rightNow.toLocaleString()
+		];
+
+		$.ajax({
+			url: "../internal/reconStats.php",
+			type: "POST",
+			async: false,
+			data: { reconVars : reconVars }
+		}).done(function(){
+			console.log(reconVars);
+		});
+		
+		$('#singleShowRecon-'+i).html('<span style="color:#ff0000;">Saved!</span>');
+	}
+	
+	//RELOAD RECONCILIATION STATS
+	/*var xmlHttp = new XMLHttpRequest();
+	var randomVar = Math.floor( Math.random() * ( 1000000000) );  //using this to bust caching of the JSON file(s)
+
+	xmlHttp.open( "GET", "https://www.pianofight.com/internal/reconStats.JSON?v=" + randomVar , false )
+	xmlHttp.send();
+	myReconStats = JSON.parse(xmlHttp.responseText);
+
+	console.log(myReconStats);
+	
+	updateView();*/
+	
+	//alert('Done!');
+}
+
+/*function toggleFreeShows(){
+	if(document.getElementById('free-show-toggle').checked) {
+		$(".free-show").hide();
+	} else {
+		$(".free-show").show();
+	}
+}*/
+
+function toggleFeeBreakdown(){
+	if(document.getElementById('fee-breakdown-toggle').checked) {
+		$(".fee-breakdown").show();
+	} else {
+		$(".fee-breakdown").hide();
+	}
+}
+
+function toggleReconStats(){
+	if(document.getElementById('recon-stats-toggle').checked) {
+		$(".recon-stats-content").show();
+	} else {
+		$(".recon-stats-content").hide();
+	}
+}
+
+function toggleAnalytics(){
+	if(document.getElementById('recon-analytics-toggle').checked) {
+		$(".recon-analytics").show();
+	} else {
+		$(".recon-analytics").hide();
+	}
+}
+
+function exportCSV(){
+	//csvData = [["r1c1", "r1c2", "r1c3"], ["r2c1", "r2c2", "r2c3"]];
+	var csvContent = "data:text/csv;charset=utf-8,";
+	
+	csvData.forEach(function(infoArray, index){
+	   dataString = infoArray.join(",");
+	   csvContent += index < csvData.length ? dataString + "\n" : dataString;
+	}); 
+	
+	var encodedUri = encodeURI(csvContent);
+	window.open(encodedUri);
+}
+
+function highlightReconVars(){
+	//Highlight recon vars that are already saved
+	var trueHtml = '';
+	
+	trueRevTotals = [];
+	trueRevTotals['trueRentalRev'] = 0;
+	trueRevTotals['trueAdjustedRentalRev'] = 0;
+	trueRevTotals['trueTechRev'] = 0;
+	trueRevTotals['trueMiscRev'] = 0;
+	trueRevTotals['trueTicketRev'] = 0;
+	trueRevTotals['trueAtdFees'] = 0;
+	trueRevTotals['trueSplitRev'] = 0;
+	trueRevTotals['trueTotalRev'] = 0;
+	trueRevTotals['trueAccountsReceivable'] = 0;
+	trueRevTotals['trueLoss'] = 0;
+	trueRevTotals['recoupableTech'] = 0;
+	trueRevTotals['recoupableRent'] = 0;
+	trueRevTotals['recoupableMisc'] = 0;
+	
+	trueSplitRevByDeal = [];
+	trueSplitRevByDeal['rental'] = 0; //For separating out split revenue in the total deal pie chart
+	trueSplitRevByDeal['copro'] = 0;
+	trueSplitRevByDeal['internal'] = 0;
+	trueSplitRevByDeal['school'] = 0;
+	trueSplitRevByDeal['other'] = 0;
+	trueSplitRevByDeal['faultline'] = 0;
+	trueSplitRevByDeal['music'] = 0;
+	
+	trueRevTotalByDeals = [];
+	trueRevTotalByDeals['rental'] = 0;
+	trueRevTotalByDeals['copro'] = 0;
+	trueRevTotalByDeals['internal'] = 0;
+	trueRevTotalByDeals['school'] = 0;
+	trueRevTotalByDeals['other'] = 0;
+	trueRevTotalByDeals['faultline'] = 0;
+	trueRevTotalByDeals['music'] = 0;
+	
+	numShowsTotalByDeals = [];
+	numShowsTotalByDeals['rental'] = 0;
+	numShowsTotalByDeals['copro'] = 0;
+	numShowsTotalByDeals['internal'] = 0;
+	numShowsTotalByDeals['school'] = 0;
+	numShowsTotalByDeals['other'] = 0;
+	numShowsTotalByDeals['faultline'] = 0;
+	numShowsTotalByDeals['music'] = 0;
+	
+	trueRevTotalsByDate = [];
+	
+	var trueTotalRevByDayOfWeek = {};
+	trueTotalRevByDayOfWeek['sunday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['monday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['tuesday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['wednesday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['thursday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['friday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	trueTotalRevByDayOfWeek['saturday'] = {dayCount:0, total:0, gross:0, '11':{total:0, gross:0, showCount:0}, '12':{total:0, gross:0, showCount:0}, '13':{total:0, gross:0, showCount:0}, '14':{total:0, gross:0, showCount:0}, '15':{total:0, gross:0, showCount:0}, '16':{total:0, gross:0, showCount:0}, '17':{total:0, gross:0, showCount:0}, '18':{total:0, gross:0, showCount:0}, '19':{total:0, gross:0, showCount:0}, '20':{total:0, gross:0, showCount:0}, '21':{total:0, gross:0, showCount:0}, '22':{total:0, gross:0, showCount:0}, '23':{total:0, gross:0, showCount:0}};
+	
+	//console.log(trueTotalRevByDayOfWeek);
+	
+	var sd = new Date( $("#startDateSelector").val() );
+	sd.setHours( sd.getHours() + 8 ); // hacky correction to fix UTC local stuff in Safari + Chrome
+	var ed = new Date( $("#endDateSelector").val() );
+	ed.setHours( ed.getHours() + 8 ); // hacky correction to fix UTC local stuff in Safari + Chrome
+	ed.setDate( ed.getDate() + 1);
+	var totalDays = (ed.getTime() - sd.getTime()) / (1000 * 60 * 60 *24);
+	for (i=0; i<totalDays; i++){
+		var dateLabel = new Date(sd);
+		dateLabel.setDate(sd.getDate() + i);
+		
+		trueRevTotalsByDate[ dateLabel.toLocaleDateString() ] = 0;
+	}
+	
+	var numShowsByEventName = {};
+	var revShowsByEventName = {};
+
+	//Show by show analysis
+	for(i=0 ; i<showIndexes.length ; i++){
+		var eId = myEvents[showIndexes[i]].id;
+		
+		if( eId in myReconStats ){
+			//Turn relevent fields green
+			$("#recon-rent-" + eId).css("background", "lightgreen");
+			$("#recon-rent-" + eId).val(myReconStats[eId].rentFee);
+			$("#recon-deposit-" + eId).css("background", "lightgreen");
+			$("#recon-deposit-" + eId).val(myReconStats[eId].deposit);
+			$("#recon-tech-" + eId).css("background", "lightgreen");
+			$("#recon-tech-" + eId).val(myReconStats[eId].techFee);
+			$("#recon-misc-num-1-" + eId).css("background", "lightgreen");
+			$("#recon-misc-num-1-" + eId).val(myReconStats[eId].miscNum1);
+			$("#recon-misc-note-1-" + eId).css("background", "lightgreen");
+			$("#recon-misc-note-1-" + eId).val(myReconStats[eId].miscTxt1);
+			$("#recon-misc-num-2-" + eId).css("background", "lightgreen");
+			$("#recon-misc-num-2-" + eId).val(myReconStats[eId].miscNum2);
+			$("#recon-misc-note-2-" + eId).css("background", "lightgreen");
+			$("#recon-misc-note-2-" + eId).val(myReconStats[eId].miscTxt2);
+			$("#recon-misc-num-3-" + eId).css("background", "lightgreen");
+			$("#recon-misc-num-3-" + eId).val(myReconStats[eId].miscNum3);
+			$("#recon-misc-note-3-" + eId).css("background", "lightgreen");
+			$("#recon-misc-note-3-" + eId).val(myReconStats[eId].miscTxt3);
+			$("#recon-pf-share-" + eId).css("background", "lightgreen");
+			$("#recon-pf-share-" + eId).val(myReconStats[eId].pfProfitSplit);
+			$("#recon-deal-type-" + eId).css("background", "lightgreen");
+			$("#recon-deal-type-" + eId).val(myReconStats[eId].dealType);
+			$("#recon-stage-" + eId).css("background", "lightgreen");
+			$("#recon-stage-" + eId).val(myReconStats[eId].stage);
+			
+			//Count Revenue by Type to display per event and total
+			var es = eventStats[showIndexes[i]];
+			console.log(es)
+			
+			var trueRentalRev = rd(parseFloat(myReconStats[eId].rentFee));
+			//var trueAdjustedRentalRev = trueRentalRev - parseFloat(myReconStats[eId].deposit); // Moved down
+			var trueTechRev = parseFloat(myReconStats[eId].techFee);
+			var trueMiscRev = parseFloat(myReconStats[eId].miscNum1) + parseFloat(myReconStats[eId].miscNum2) + parseFloat(myReconStats[eId].miscNum3);
+			//var trueTicketRev = rd(es.pfTixMargin);
+			var trueTicketRev = rd(es.pfRoyalty+es.pfLicenseeFee);
+			var trueSplitRev = rd((es.total_rev - (trueRentalRev + trueTechRev + trueMiscRev + trueTicketRev + es.ebTixFees + es.ccFees - es.atdFees)) * (parseFloat(myReconStats[eId].pfProfitSplit)/100));
+			var trueShowSplitRev = rd((es.total_rev - (trueRentalRev + trueTechRev + trueMiscRev + trueTicketRev + es.ebTixFees + es.ccFees)) * (1-parseFloat(myReconStats[eId].pfProfitSplit)/100));
+			var trueAtdFees = rd(es.atdFees);
+			
+			//Correct in case total revenue didn't cover rent, tech, misc (only applies to non rentals)
+			var deposit = parseFloat(myReconStats[eId].deposit);
+			var netRev = es.total_rev - (es.pfTixMargin + es.ebTixFees + es.ccFees) + deposit;
+			
+			var trueAccountsReceivable = 0;
+			var recoupableTech = 0;
+			var recoupableRent = 0;
+			var recoupableMisc = 0;
+			/*if (trueTechRev + trueRentalRev + trueMiscRev > netRev) {
+				var showRevShare = (1-parseFloat(myReconStats[eId].pfProfitSplit)/100);
+				if ( netRev <= trueTechRev ){
+					recoupableTech = 0;
+					trueRevTotals['recoupableTech'] += 0;
+
+					recoupableRent = 0;
+					trueRevTotals['recoupableRent'] += 0;
+					
+					recoupableMisc = 0;
+					trueRevTotals['recoupableMisc'] += 0;
+					
+					trueTechRev = rd(netRev);
+					trueRentalRev = 0;
+					trueMiscRev = 0;
+					
+					trueAccountsReceivable = rd(recoupableTech + parseFloat(myReconStats[eId].rentFee) + parseFloat(myReconStats[eId].miscNum1) + parseFloat(myReconStats[eId].miscNum2) + parseFloat(myReconStats[eId].miscNum3));
+				 }
+				 else if ( netRev <= (trueTechRev + trueRentalRev) ) {
+					recoupableRent = 0;
+					trueRevTotals['recoupableRent'] += 0;
+					
+					recoupableMisc = 0;
+					trueRevTotals['recoupableMisc'] += 0;
+					
+					trueRentalRev = rd( (netRev - trueTechRev) );
+					trueMiscRev = 0;
+					
+					trueAccountsReceivable = rd(recoupableRent + parseFloat(myReconStats[eId].miscNum1) + parseFloat(myReconStats[eId].miscNum2) + parseFloat(myReconStats[eId].miscNum3));
+				 }
+				 else if ( netRev <= (trueTechRev + trueRentalRev + trueMiscRev) ) {
+					recoupableMisc = 0;
+					trueRevTotals['recoupableMisc'] += 0;
+					
+					trueMiscRev = rd( netRev - (trueTechRev + trueRentalRev) );
+					
+					trueAccountsReceivable = rd(recoupableMisc);
+				 }
+			}*/
+			
+			var trueAdjustedRentalRev = trueRentalRev - deposit; // Move from above to make Net of Deposits work correctly
+			
+			//Adjust accounts receivable in case of split loss
+			var trueLoss = 0;
+			if (trueSplitRev < 0){
+				trueLoss = (trueSplitRev) * -1;
+				trueRevTotals['trueLoss'] -= 0;
+				trueSplitRev = 0; // True Split Rev can NEVER be less than 0
+			}
+			else if(trueShowSplitRev < 0){
+				//Not sure we need to do anything here
+			}
+			
+			trueRevTotals['trueAccountsReceivable'] += trueAccountsReceivable;
+			
+			//Add up total rev AFTER corrections
+			var trueTotalRev = rd(trueRentalRev + trueTechRev + trueMiscRev + trueTicketRev + trueSplitRev);
+			
+			//Date Stuff
+			var eDate = new Date( myEvents[showIndexes[i]]['start']['utc'] );
+			var hrs = eDate.getHours();
+			if ( eDate.toLocaleDateString() in trueRevTotalsByDate){
+				trueRevTotalsByDate[eDate.toLocaleDateString()] += trueTotalRev;
+			}
+			
+			if(eDate.getDay()===0){
+				trueTotalRevByDayOfWeek['sunday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['sunday']['gross'] += es.total_rev;
+				slotTotalAndCount('sunday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===1){
+				trueTotalRevByDayOfWeek['monday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['monday']['gross'] += es.total_rev;
+				slotTotalAndCount('monday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===2){
+				trueTotalRevByDayOfWeek['tuesday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['tuesday']['gross'] += es.total_rev;
+				slotTotalAndCount('tuesday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===3){
+				trueTotalRevByDayOfWeek['wednesday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['wednesday']['gross'] += es.total_rev;
+				slotTotalAndCount('wednesday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===4){
+				trueTotalRevByDayOfWeek['thursday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['thursday']['gross'] += es.total_rev;
+				slotTotalAndCount('thursday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===5){
+				trueTotalRevByDayOfWeek['friday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['friday']['gross'] += es.total_rev;
+				slotTotalAndCount('friday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+			else if(eDate.getDay()===6){
+				trueTotalRevByDayOfWeek['saturday']['total'] += trueTotalRev;
+				trueTotalRevByDayOfWeek['saturday']['gross'] += es.total_rev;
+				slotTotalAndCount('saturday', hrs, trueTotalRevByDayOfWeek, trueTotalRev, es.total_rev);
+			}
+
+			//Per show HTML
+			trueHtml = '';
+			trueHtml += 'True Rental Revenue: $' + trueRentalRev + "<br>";
+			trueHtml += 'True Tech Revenue: $' + trueTechRev + "<br>";
+			trueHtml += 'True Misc Revenue: $' + trueMiscRev + "<br>";
+			trueHtml += 'True Ticket Margin Revenue: $' + trueTicketRev + "<br>";
+			trueHtml += 'True ATD Fees: ($' + trueAtdFees + ")<br>"
+			trueHtml += 'True Split Revenue: $' + trueSplitRev + "<br>";
+			trueHtml += 'True Total Revenue: $' + rd(trueTotalRev-trueAtdFees) + " Net of ATD Fees<br><br>";
+			trueHtml += 'True Accounts Receivable: $' + trueAccountsReceivable + " ( True Loss: $" + trueLoss +" )<br>";
+			trueHtml += 'Recoupable Tech: $' + rd(recoupableTech) + ' / Recoupable Rental: $' + rd(recoupableRent) + ' / Recoupable Misc: $' + rd(recoupableMisc) + '<br><br>';
+			
+			var reconDate = new Date(es.utc_start);
+			var escapedName = es.name.replace(/\'/g, "").replace(/\"/g, ""); //Fixes problem with quotes in show names
+			
+			trueHtml += "<input type='submit' value='Generate Single Show Reconciliation' onClick='generateReportSingleShow(\"" + escapedName + "\", \"" + returnDateTime(reconDate) + "\", " + (es.total_rev-es.atdSales-es.ebTixFees-es.ccFees-es.pfRoyalty+es.atdFees) + ", " + (es.tixSold-es.atdTix) + ", " + es.atdSales + ", " + es.atdTix + ", " + es.comps + ", " + myReconStats[eId].rentFee + ", " + myReconStats[eId].deposit + ", " + myReconStats[eId].techFee + ", \"" + myReconStats[eId].miscTxt1 + "\", " + myReconStats[eId].miscNum1 + ", \"" + myReconStats[eId].miscTxt2 + "\", " + myReconStats[eId].miscNum2 + ", \"" + myReconStats[eId].miscTxt3 + "\", " + myReconStats[eId].miscNum3 + ", " +  myReconStats[eId].pfProfitSplit + ", \"" +  myReconStats[eId].dealType + "\")'>";
+			
+			//DRW
+			
+			$("#trueRev-" + eId).html(trueHtml);
+			
+			trueRevTotals['trueRentalRev'] += trueRentalRev;
+			trueRevTotals['trueAdjustedRentalRev'] += trueAdjustedRentalRev;
+			trueRevTotals['trueTechRev'] += trueTechRev;
+			trueRevTotals['trueMiscRev'] += trueMiscRev;
+			trueRevTotals['trueTicketRev'] += trueTicketRev;
+			trueRevTotals['trueAtdFees'] += trueAtdFees;
+			trueRevTotals['trueSplitRev'] += trueSplitRev;
+			trueRevTotals['trueTotalRev'] += trueTotalRev;
+			
+			//Add up true total rev by deal type
+			if(myReconStats[eId].dealType === 'rental'){ 
+				trueRevTotalByDeals['rental'] += trueTotalRev; 
+				trueSplitRevByDeal['rental'] += trueSplitRev;
+				numShowsTotalByDeals['rental'] += 1; 
+			}
+			else if(myReconStats[eId].dealType === 'copro'){ 
+				trueRevTotalByDeals['copro'] += trueTotalRev; 
+				trueSplitRevByDeal['copro'] += trueSplitRev;
+				numShowsTotalByDeals['copro'] += 1; 
+			}
+			else if(myReconStats[eId].dealType === 'internal'){ 
+				trueRevTotalByDeals['internal'] += trueTotalRev; 
+				trueSplitRevByDeal['internal'] += trueSplitRev;
+				numShowsTotalByDeals['internal'] += 1; 
+			}
+			else if(myReconStats[eId].dealType === 'school'){ 
+				trueRevTotalByDeals['school'] += trueTotalRev;
+				trueSplitRevByDeal['school'] += trueSplitRev;
+				numShowsTotalByDeals['school'] += 1; 
+			}
+			else if(myReconStats[eId].dealType === 'other'){ 
+				trueRevTotalByDeals['other'] += trueTotalRev; 
+				trueSplitRevByDeal['other'] += trueSplitRev;
+				numShowsTotalByDeals['other'] += 1; 
+			}
+			else if(myReconStats[eId].dealType === 'faultline'){ 
+				trueRevTotalByDeals['faultline'] += trueTotalRev; 
+				trueSplitRevByDeal['faultline'] += trueSplitRev;
+				numShowsTotalByDeals['faultline'] += 1;
+			}
+			else if(myReconStats[eId].dealType === 'music'){ 
+				trueRevTotalByDeals['music'] += trueTotalRev; 
+				trueSplitRevByDeal['music'] += trueSplitRev;
+				numShowsTotalByDeals['music'] += 1;
+			}
+			
+			if ( !(myEvents[showIndexes[i]].name.text in revShowsByEventName) ){
+				revShowsByEventName[ myEvents[showIndexes[i]].name.text ] = 0;
+			}
+			revShowsByEventName[ myEvents[showIndexes[i]].name.text ] += trueTotalRev;
+			
+			trueRevTotalsById[eId] = trueTotalRev; // for the CSVs
+		}
+		
+		if ( !(myEvents[showIndexes[i]].name.text in numShowsByEventName) ){
+			numShowsByEventName[ myEvents[showIndexes[i]].name.text ] = 0;
+		}
+		numShowsByEventName[ myEvents[showIndexes[i]].name.text ] ++;		
+	}
+	
+	//console.log(trueTotalRevByDayOfWeek);
+	
+	trueHtml = '';
+	trueHtml += "<strong>TOTALS</strong><br>"
+	trueHtml += 'True Rental Revenue: $' + rd(trueRevTotals['trueRentalRev']) + ' ( Net Of Deposits: $' + rd(trueRevTotals['trueAdjustedRentalRev']) + ' )<br>';
+	trueHtml += 'True Tech Revenue: $' + rd(trueRevTotals['trueTechRev']) + '<br>';
+	trueHtml += 'True Misc Revenue: $' + rd(trueRevTotals['trueMiscRev']) + '<br>';
+	trueHtml += 'True Ticket Margin Revenue: $' + rd(trueRevTotals['trueTicketRev']) + '<br>';
+	trueHtml += 'True ATD Fees: ($' + rd(trueRevTotals['trueAtdFees']) + ')<br>';
+	trueHtml += 'True Split Revenue: $' + rd(trueRevTotals['trueSplitRev']) + ' ( Internal: $' + rd(trueSplitRevByDeal['internal']+trueSplitRevByDeal['school']) + ' / Copro: $' + rd(trueSplitRevByDeal['copro']+trueSplitRevByDeal['faultline']+trueSplitRevByDeal['other']+trueSplitRevByDeal['rental']+trueSplitRevByDeal['music']) + ' )<br>';
+	trueHtml += 'True Total Revenue: $' + rd(trueRevTotals['trueTotalRev']-trueRevTotals['trueAtdFees']) + ' Net of ATD Fees<br><br>';
+	trueHtml += 'True Total Accounts Receivable: $' + rd(trueRevTotals['trueAccountsReceivable']) + ' ( True Loss: $' + rd(trueRevTotals['trueLoss']) + ' )<br>';
+	trueHtml += 'Recoupable Tech: $' + rd(trueRevTotals['recoupableTech']) + ' / Recoupable Rental: $' + rd(trueRevTotals['recoupableRent']) + ' / Recoupable Misc: $' + rd(trueRevTotals['recoupableMisc']) + '<br>';
+	
+	$("#trueRevTotals").html(trueHtml);
+	
+	//PIE CHART of Revenue by Revenue Type
+	var pieData = [];
+    pieData['values'] = [];
+    pieData['labels'] = [];
+    
+    //pieData['values'] = [trueRevTotals['trueRentalRev'], trueRevTotals['trueTechRev'], trueRevTotals['trueMiscRev'], trueRevTotals['trueTicketRev'], trueRevTotals['trueSplitRev']];
+    //pieData['labels'] = ['Rental', 'Tech', 'Misc', 'Ticket Margin', 'Split'];
+    
+    pieData['values'] = [trueRevTotals['trueRentalRev'], trueRevTotals['trueTechRev'], trueRevTotals['trueMiscRev'], trueRevTotals['trueTicketRev'], trueSplitRevByDeal['rental'], trueSplitRevByDeal['copro'], trueSplitRevByDeal['internal'], trueSplitRevByDeal['school'], trueSplitRevByDeal['other'], trueSplitRevByDeal['faultline'],trueSplitRevByDeal['music']];
+    pieData['labels'] = ['Rental', 'Tech', 'Misc', 'Ticket Margin', 'Split (Rental)', 'Split (Copro)', 'Split (Internal)', 'Split (School)', 'Split (Other)', 'Split (FaultLine)', 'Split (Music)'];
+    
+    var chartData = [{
+		values: pieData['values'],
+		labels: pieData['labels'],
+		type: 'pie'
+	}];
+	
+	var layout = {
+		title: 'True Rev by Rev Type',
+		height: 400,
+		width: 400
+	};
+	
+	Plotly.newPlot('trueRevPieChart', chartData, layout);
+	
+	//PIE CHART of Revenue by Deal Type
+    pieData['values'] = [];
+    pieData['labels'] = [];
+    
+    pieData['values'] = [trueRevTotalByDeals['rental'], trueRevTotalByDeals['copro'], trueRevTotalByDeals['internal'], trueRevTotalByDeals['school'], trueRevTotalByDeals['other'], trueRevTotalByDeals['faultline'], trueRevTotalByDeals['music']];
+    pieData['labels'] = ['Rental', 'Copro', 'Internal', 'School', 'Other', 'FaultLine', 'Music'];
+    
+    var chartData = [{
+		values: pieData['values'],
+		labels: pieData['labels'],
+		type: 'pie'
+	}];
+	
+	var layout = {
+		title: 'True Rev by Deal Type',
+		height: 400,
+		width: 400
+	};
+	
+	Plotly.newPlot('trueRevByDealPieChart', chartData, layout);
+	
+	//PIE CHART of Revenue by Deal Type
+    pieData['values'] = [];
+    pieData['labels'] = [];
+    
+    pieData['values'] = [numShowsTotalByDeals['rental'], numShowsTotalByDeals['copro'], numShowsTotalByDeals['internal'], numShowsTotalByDeals['school'], numShowsTotalByDeals['other'], numShowsTotalByDeals['faultline'], numShowsTotalByDeals['music']];
+    pieData['labels'] = ['Rental', 'Copro', 'Internal', 'School', 'Other', 'FaultLine', 'Music'];
+    
+    var hole = numShowsTotalByDeals['rental'] + numShowsTotalByDeals['copro'] + numShowsTotalByDeals['internal'] + numShowsTotalByDeals['school'] + numShowsTotalByDeals['other'] + numShowsTotalByDeals['faultline'] + numShowsTotalByDeals['music'];
+    
+    var chartData = [{
+		values: pieData['values'],
+		labels: pieData['labels'],
+		hole: hole,
+		type: 'pie'
+	}];
+	
+	var layout = {
+		title: 'Number of Shows by Deal Type',
+		height: 400,
+		width: 400
+	};
+	
+	Plotly.newPlot('numShowsByDealPieChart', chartData, layout);
+	
+	
+	//LINE CHART of REVENUE BY DAY
+	var barData = [];
+    barData['values'] = [];
+    barData['labels'] = [];
+    
+    for(key in trueRevTotalsByDate){ //This seems to get the dates in the correct order
+		barData['labels'].push(key);
+		barData['values'].push(trueRevTotalsByDate[key]);
+    }
+    
+    //Sort Data by Week
+	var barDataByWeek = [];
+    barDataByWeek['values'] = [];
+    barDataByWeek['labels'] = [];
+    for(i=0; i<barData['labels'].length; i+=7){
+    	if( !barData['labels'][i+6] ){
+    		var weekLabel = barData['labels'][i] + " - end";
+    	}
+    	else{
+    		var weekLabel = barData['labels'][i] + " - " + barData['labels'][i+6];
+    	}
+    	
+    	var weekValue = 0;
+    	for(j=0; j<7; j++){
+    		if( barData['values'][i+j] ){
+    			weekValue += barData['values'][i+j];
+    		}
+    	}
+    	
+		barDataByWeek['labels'].push(weekLabel);
+    	barDataByWeek['values'].push(weekValue);
+    }
+    
+    //Sort Data by Month
+    var barDataByMonth = [];
+    barDataByMonth['labels'] = [];
+    barDataByMonth['values'] = [];
+    var barDataByMonthDict = {};
+    for (i=0; i<barData['labels'].length; i++){
+    	var d1 = new Date(barData['labels'][i]);
+    	var labelStr = d1.getFullYear() + "/" + (d1.getMonth()+1);
+    	
+    	if ( !(labelStr in barDataByMonthDict) ){
+    		barDataByMonthDict[labelStr] = 0;
+    	}
+    	
+    	barDataByMonthDict[labelStr] += barData['values'][i];
+    }
+    
+    for(key in barDataByMonthDict){ //This seems to get the dates in the correct order
+		barDataByMonth['labels'].push(key);
+		barDataByMonth['values'].push(barDataByMonthDict[key]);
+    }
+	
+	var chartDataByDay = [{
+		x: barData['labels'],
+		y: barData['values'],
+		type: 'bar'
+	}];
+	
+	var chartDataByWeek = [{
+		x: barDataByWeek['labels'],
+		y: barDataByWeek['values'],
+		type: 'bar'
+	}];
+	
+	var chartDataByMonth = [{
+		x: barDataByMonth['labels'],
+		y: barDataByMonth['values'],
+		type: 'bar'
+	}];
+	
+	var layoutByDay = {
+		title: 'True Total Revenue by Day',
+		height: 400,
+		width: 1200
+	};
+	
+	var layoutByWeek = {
+		title: 'True Total Revenue by Week',
+		height: 400,
+		width: 1200
+	};
+	
+	var layoutByMonth = {
+		title: 'True Total Revenue by Month',
+		height: 400,
+		width: 1200
+	};
+
+	Plotly.newPlot('trueRevBarChartByDay', chartDataByDay, layoutByDay);
+	Plotly.newPlot('trueRevBarChartByWeek', chartDataByWeek, layoutByWeek);
+	Plotly.newPlot('trueRevBarChartByMonth', chartDataByMonth, layoutByMonth);
+	
+	sortByDayWeekMonth();
+	
+	sd.setHours(0);
+	ed.setHours(0);
+	for(i=sd.getTime(); i<ed.getTime(); i += 86400000){
+		var d3 = new Date(i)
+		//console.log(d3);
+		if( d3.getDay() === 0){
+			trueTotalRevByDayOfWeek['sunday']['dayCount']++;
+		}
+		else if(d3.getDay()===1){
+			trueTotalRevByDayOfWeek['monday']['dayCount']++;
+		}
+		else if(d3.getDay()===2){
+			trueTotalRevByDayOfWeek['tuesday']['dayCount']++;
+		}
+		else if(d3.getDay()===3){
+			trueTotalRevByDayOfWeek['wednesday']['dayCount']++;
+		}
+		else if(d3.getDay()===4){
+			trueTotalRevByDayOfWeek['thursday']['dayCount']++;
+		}
+		else if(d3.getDay()===5){
+			trueTotalRevByDayOfWeek['friday']['dayCount']++;
+		}
+		else if(d3.getDay()===6){
+			trueTotalRevByDayOfWeek['saturday']['dayCount']++;
+		}
+	}
+	
+	var chartData = [{
+		x: ['Monday','Tuesday','Wednesday','Thursday', 'Friday', 'Saturday','Sunday'],
+		y: [
+			trueTotalRevByDayOfWeek['monday']['total']/trueTotalRevByDayOfWeek['monday']['dayCount'],
+			trueTotalRevByDayOfWeek['tuesday']['total']/trueTotalRevByDayOfWeek['tuesday']['dayCount'],
+			trueTotalRevByDayOfWeek['wednesday']['total']/trueTotalRevByDayOfWeek['wednesday']['dayCount'],
+			trueTotalRevByDayOfWeek['thursday']['total']/trueTotalRevByDayOfWeek['thursday']['dayCount'],
+			trueTotalRevByDayOfWeek['friday']['total']/trueTotalRevByDayOfWeek['friday']['dayCount'],
+			trueTotalRevByDayOfWeek['saturday']['total']/trueTotalRevByDayOfWeek['saturday']['dayCount'],
+			trueTotalRevByDayOfWeek['sunday']['total']/trueTotalRevByDayOfWeek['sunday']['dayCount']
+			],
+		type: 'bar'
+	}];
+	
+	var layout = {
+		title: 'Ave True Total Rev by Day of Week',
+		height: 400,
+		width: 400
+	};
+	
+	Plotly.newPlot('trueRevByDayOfWeekBarChart', chartData, layout);
+	
+	
+	//LIST 1
+	var aveRevShowsByEventName = [];
+	for(key in numShowsByEventName){
+		aveRevShowsByEventName[key] = revShowsByEventName[key]/numShowsByEventName[key];
+	}
+	
+	var keysSorted = Object.keys(aveRevShowsByEventName).sort(function(a,b){return aveRevShowsByEventName[a]-aveRevShowsByEventName[b]})
+
+	html = "";
+	html += "<div style='text-align: center;'>Top Shows by Ave Revenue</div>";
+	for(i = 0; i <= 10 ; i++){
+		if( keysSorted[ keysSorted.length-i ] ) {
+			html += "<div style='width:30px; display:inline-block; vertical-align:top;'>" +i + ".</div>";
+			html += "<div style='width:250px; display:inline-block; vertical-align:top;'>" + keysSorted[ keysSorted.length-i ] + "</div>";
+			html += "<div style='width:120px; display:inline-block; font-weight:bold; vertical-align:top;'> $" + rd(aveRevShowsByEventName[ keysSorted[ keysSorted.length-i ] ]) + " (" + numShowsByEventName[ keysSorted[ keysSorted.length-i ]] + ")</div><br>";
+		}
+	}
+	
+	$('#topShowInPeriodByAveRevenue').html(html);
+	
+	//LIST 2
+	keysSorted = Object.keys(numShowsByEventName).sort(function(a,b){return numShowsByEventName[a]-numShowsByEventName[b]})
+	
+	html = "";
+	html += "<div style='text-align: center;'>Top Shows by Number of Performances</div>";
+	for(i = 0; i <= 10 ; i++){
+		if( keysSorted[ keysSorted.length-i ] ) {
+			html += "<div style='width:30px; display:inline-block; vertical-align:top;'>" +i + ".</div>";
+			html += "<div style='width:210px; display:inline-block; vertical-align:top;'>" + keysSorted[ keysSorted.length-i ] + "</div>";
+			html += "<div style='width:160px; display:inline-block; font-weight:bold; vertical-align:top;'>"+ numShowsByEventName[ keysSorted[ keysSorted.length-i ] ];
+			
+			html+=" ($" + rd( aveRevShowsByEventName[ keysSorted[ keysSorted.length-i ]]) + ")";
+			
+			html+="</div><br>";
+		}
+	}
+	
+	$('#topShowInPeriodByNumber').html(html);
+	
+	//HEATMAP
+	var zVars = [[],[],[],[],[],[],[]];
+	var zShowCounts = [[],[],[],[],[],[],[]];
+	var zDayCounts = [[],[],[],[],[],[],[]];
+	for (i=11; i<=23; i++){
+		zVars[0].push(rd(trueTotalRevByDayOfWeek['monday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['monday']['dayCount'] || 0))
+		zVars[1].push(rd(trueTotalRevByDayOfWeek['tuesday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['tuesday']['dayCount'] || 0))
+		zVars[2].push(rd(trueTotalRevByDayOfWeek['wednesday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['wednesday']['dayCount'] || 0))
+		zVars[3].push(rd(trueTotalRevByDayOfWeek['thursday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['thursday']['dayCount'] || 0))
+		zVars[4].push(rd(trueTotalRevByDayOfWeek['friday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['friday']['dayCount'] || 0))
+		zVars[5].push(rd(trueTotalRevByDayOfWeek['saturday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['saturday']['dayCount'] || 0))
+		zVars[6].push(rd(trueTotalRevByDayOfWeek['sunday'][i.toString()]['gross']/trueTotalRevByDayOfWeek['sunday']['dayCount'] || 0))
+		
+		zShowCounts[0].push( (trueTotalRevByDayOfWeek['monday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['monday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['monday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['monday']['dayCount'] || 0)) + "%")
+		zShowCounts[1].push( (trueTotalRevByDayOfWeek['monday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['tuesday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['tuesday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['tuesday']['dayCount'] || 0)) + "%")
+		zShowCounts[2].push( (trueTotalRevByDayOfWeek['tuesday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['wednesday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['wednesday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['wednesday']['dayCount'] || 0)) + "%")
+		zShowCounts[3].push( (trueTotalRevByDayOfWeek['thursday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['thursday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['thursday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['thursday']['dayCount'] || 0)) + "%")
+		zShowCounts[4].push( (trueTotalRevByDayOfWeek['friday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['friday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['friday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['friday']['dayCount'] || 0)) + "%")
+		zShowCounts[5].push( (trueTotalRevByDayOfWeek['saturday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['saturday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['saturday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['saturday']['dayCount'] || 0)) + "%")
+		zShowCounts[6].push( (trueTotalRevByDayOfWeek['sunday']['dayCount'] || 0) + " days / " + (trueTotalRevByDayOfWeek['sunday'][i.toString()]['showCount'] || 0) + " shows = " + rd(((trueTotalRevByDayOfWeek['sunday'][i.toString()]['showCount'] || 0)*100)/(trueTotalRevByDayOfWeek['sunday']['dayCount'] || 0)) + "%")
+	}
+	
+	//console.log(zVars);
+	//console.log(transpose(zVars));
+	
+	var heatMapData = [{
+		z: transpose(zVars),
+		x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    	y: ['11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm', '6pm', '7pm', '8pm', '9pm', '10pm', '11pm'],
+    	text: transpose(zShowCounts),
+		type: 'heatmap'
+	}];
+	
+	var layout = {
+		title: 'Ave Gross By Day and Time',
+		height: 400,
+		width: 400
+	};
+
+	Plotly.newPlot('aveRevByDayAndTimeHeatMap', heatMapData, layout);
+	
+	//HEATMAP 2
+	var zVars = [[],[],[],[],[],[],[]];
+	for (i=11; i<=23; i++){
+		zVars[0].push(rd(trueTotalRevByDayOfWeek['monday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['monday'][i.toString()]['showCount'] || 0))
+		zVars[1].push(rd(trueTotalRevByDayOfWeek['tuesday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['tuesday'][i.toString()]['showCount'] || 0))
+		zVars[2].push(rd(trueTotalRevByDayOfWeek['wednesday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['wednesday'][i.toString()]['showCount'] || 0))
+		zVars[3].push(rd(trueTotalRevByDayOfWeek['thursday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['thursday'][i.toString()]['showCount'] || 0))
+		zVars[4].push(rd(trueTotalRevByDayOfWeek['friday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['friday'][i.toString()]['showCount'] || 0))
+		zVars[5].push(rd(trueTotalRevByDayOfWeek['saturday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['saturday'][i.toString()]['showCount'] || 0))
+		zVars[6].push(rd(trueTotalRevByDayOfWeek['sunday'][i.toString()]['gross']/ trueTotalRevByDayOfWeek['sunday'][i.toString()]['showCount'] || 0))
+	}
+	
+	//console.log(transpose(zVars));
+	
+	var heatMapData = [{
+		z: transpose(zVars),
+		x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    	y: ['11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm', '6pm', '7pm', '8pm', '9pm', '10pm', '11pm'],
+    	text: transpose(zShowCounts),
+		type: 'heatmap'
+	}];
+	
+	var layout = {
+		title: 'Ave Gross Per Show by Day and Time',
+		height: 400,
+		width: 400
+	};
+
+	Plotly.newPlot('aveRevPerShowByDayAndTimeHeatMap', heatMapData, layout);
+	
+}
+
+function sortByDayWeekMonth(){
+	if( $('#byDayWeekMonthSelector').val()==='byDay' ){
+		$('#trueRevBarChartByDay').show();
+		$('#trueRevBarChartByWeek').hide();
+		$('#trueRevBarChartByMonth').hide();
+	}
+	else if( $('#byDayWeekMonthSelector').val()==='byWeek' ){
+		$('#trueRevBarChartByDay').hide();
+		$('#trueRevBarChartByWeek').show();
+		$('#trueRevBarChartByMonth').hide();
+	}
+	else if( $('#byDayWeekMonthSelector').val()==='byMonth' ){
+		$('#trueRevBarChartByDay').hide();
+		$('#trueRevBarChartByWeek').hide();
+		$('#trueRevBarChartByMonth').show();
+	}
+}
+
+function slotTotalAndCount(dayOfWeek, hrs, trueTotalRevByDayOfWeek, trueTotalRev, total_rev){
+	if(hrs >= 11 && hrs <12) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['11']['total'] += trueTotalRev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['11']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['11']['showCount'] ++;
+	}
+	else if(hrs >= 12 && hrs <13) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['12']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['12']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['12']['showCount'] ++;
+	}
+	else if(hrs >= 13 && hrs <14) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['13']['total'] += trueTotalRev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['13']['gross'] += total_rev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['13']['showCount'] ++;
+	}
+	else if(hrs >= 14 && hrs <15) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['14']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['14']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['14']['showCount'] ++;
+	}
+	else if(hrs >= 15 && hrs <16) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['15']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['15']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['15']['showCount'] ++;
+	}
+	else if(hrs >= 16 && hrs <17) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['16']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['16']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['16']['showCount'] ++;
+	}
+	else if(hrs >= 17 && hrs <18) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['17']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['17']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['17']['showCount'] ++;
+	}
+	else if(hrs >= 18 && hrs <19) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['18']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['18']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['18']['showCount'] ++;
+	}
+	else if(hrs >= 19 && hrs <20) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['19']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['19']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['19']['showCount'] ++;
+	}
+	else if(hrs >= 20 && hrs <21) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['20']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['20']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['20']['showCount'] ++;
+	}
+	else if(hrs >= 21 && hrs <22) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['21']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['21']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['21']['showCount'] ++;
+	}
+	else if(hrs >= 22 && hrs <23) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['22']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['22']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['22']['showCount'] ++;
+	}
+	else if(hrs >= 23 && hrs <24) { 
+		trueTotalRevByDayOfWeek[dayOfWeek]['23']['total'] += trueTotalRev; 
+		trueTotalRevByDayOfWeek[dayOfWeek]['23']['gross'] += total_rev;
+		trueTotalRevByDayOfWeek[dayOfWeek]['23']['showCount'] ++;
+	}
+}
+
+function transpose(a) {
+
+  // Calculate the width and height of the Array
+  var w = a.length ? a.length : 0,
+    h = a[0] instanceof Array ? a[0].length : 0;
+
+  // In case it is a zero matrix, no transpose routine needed.
+  if(h === 0 || w === 0) { return []; }
+
+  /**
+   * @var {Number} i Counter
+   * @var {Number} j Counter
+   * @var {Array} t Transposed data is stored in this array.
+   */
+  var i, j, t = [];
+
+  // Loop through every item in the outer array (height)
+  for(i=0; i<h; i++) {
+
+    // Insert a new row (array)
+    t[i] = [];
+
+    // Loop through every item per item in outer array (width)
+    for(j=0; j<w; j++) {
+
+      // Save transposed data.
+      t[i][j] = a[j][i];
+    }
+  }
+
+  return t;
+}
+
+</script>
+<style>
+html{
+	margin:0px;
+	border:none;
+	padding:0px;
+}
+
+body{
+	font-family: 'Open Sans', sans-serif;
+	margin:0px 25px 0px 10px;
+}
+
+.fee-breakdown{
+	display:none;
+}
+
+.recon-element{
+	width: 100px!important;
+    display: inline-block;
+    margin: 0px;
+    padding: 0px 2px;
+    border: 1px white;
+    font-size: .8em;
+}
+
+.recon-stats-content{
+	display:none;
+}
+</style>
+</head>
+<body>
+	<h1>THE REVENUE WIZARD SF</h1>
+	<div id='controls'>
+		<input type="date" id="startDateSelector">
+		<input type="date" id="endDateSelector">
+		<input type="submit" value="1 Day" onClick="setDateDays(1);">
+		<input type="submit" value="7 Days" onClick="setDateDays(7);">
+		<input type="submit" value="30 Days" onClick="setDateDays(30);">
+		<input type="submit" value="90 Days" onClick="setDateDays(90);">
+		<input type="submit" value="All Time" onClick="setDateAllTime();">
+		<input type="checkbox" id="include-no-rev-toggle"> 
+			<span style='font-size:0.8em;'>Include 0 Revenue Shows</span>
+		<select id="dealTypeSelector">
+			<option value="All Deals">All Deals</option>
+			<option value="rental">Rental</option>
+			<option value="copro">Copro</option>
+			<option value="internal">Internal</option>
+			<option value="faultline">FaultLine</option>
+			<option value="school">School</option>
+			<option value="music">Music</option>
+			<option value="other">Other</option>
+		</select>
+		<select id="stageSelector">
+			<option value="All Stages">All Stages</option>
+			<option value="mainStage">Main Stage</option>
+			<option value="secondStage">Second Stage</option>
+			<option value="barStage">Bar Stage</option>
+			<option value="fullVenue">Full Venue</option>
+			<option value="other">Other</option>
+		</select>
+		</br>
+		<select id="show-selector">
+			<option value="All Shows">All Shows</option>
+		</select>
+		<br/>
+		<input type="submit" value="Update View" onClick="updateView();"> <br>
+		<!--input type="checkbox" id="free-show-toggle" onClick="toggleFreeShows();"> Hide Free Shows -->
+		<input type="checkbox" id="fee-breakdown-toggle" onClick="toggleFeeBreakdown();"> 
+			<span style='font-size:0.8em;'>Show Fee Breakdown</span>
+		<input type="checkbox" id="recon-stats-toggle" onClick="toggleReconStats();" checked> 
+			<span style='font-size:0.8em;'>Show Reconciliation Stats</span>
+		<input type="checkbox" id="recon-analytics-toggle" onClick="toggleAnalytics();"> 
+			<span style='font-size:0.8em;'>Show Analytics</span>
+			<select id='byDayWeekMonthSelector' onchange='sortByDayWeekMonth()'>
+			<option value='byDay'>Sort By Day</option>
+			<option value='byWeek'>Sort By Week</option>
+			<option value='byMonth'>Sort By Month</option>
+		</select>
+	</div>
+	
+	<div id='rev-wiz'></div>
+	
+	<div id='csv-export'>
+		<input type="submit" value="Export CSV" onClick="exportCSV();">
+	</div>
+	<div class ="recon-stats-content">
+		<!--input type='submit' value='Save Reconciliation Variables' onClick='saveReconVars();'> <br-->
+		<input type='submit' id='recon' value='Generate Reconciliation' onClick='generateReport();'>
+	</div>
+	<br>
+</body>
+</html>
